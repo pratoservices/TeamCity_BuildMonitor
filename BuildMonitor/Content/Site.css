@@ -59,6 +59,7 @@ html * {
 .projectTitle {
 	color: #777;
 	margin-top: -12px;
+    clear: both;
 }
 
 .buildTitle {
@@ -96,6 +97,13 @@ html * {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+.tests {
+    position: absolute;
+    left: 80%;
+    bottom: 28%;
+    text-align: center;
 }
 
 .status-None {

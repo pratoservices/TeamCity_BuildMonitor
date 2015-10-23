@@ -2,26 +2,32 @@
 <Settings>
 	<Groups>
 		<!-- Example xml structure for custom jobs, you can create as many groups with jobs as you want here -->
-		<Group name="Backend">
+		<Group name="WorkB">
 			<Jobs>
-				<Job id="TeamCity_Job_Id_1" />
-				<Job id="TeamCity_Job_Id_2" />
-				<Job id="TeamCity_Job_Id_3" />
-				<Job id="TeamCity_Job_Id_4" />
+        <!--WorkB Auto & Test-->
+				<Job id="bt3" />
+        <!--WorkB Deploy Intern-->
+				<Job id="WorkB_WorkBBuildPackageDeployTestDemosSuperAwesome" />
+        <!--WorkB Nightly-->
+				<Job id="bt2" />
 			</Jobs>
 		</Group>
-		<Group name="Frontend">
+		<Group name="MSP">
 			<Jobs>
-				<Job id="TeamCity_Job_Id_5" />
-				<Job id="TeamCity_Job_Id_6" />
-				<Job id="TeamCity_Job_Id_7" />
-				<Job id="TeamCity_Job_Id_8" />
+        <!--MSP Auto & Test-->
+				<Job id="bt8" />
+        <!--MSP Nightly-->
+				<Job id="bt5" />
 			</Jobs>
 		</Group>
-		<Group name="Tests">
+		<Group name="Modules">
 			<Jobs>
-				<Job id="TeamCity_Job_Id_9" />
-				<Job id="TeamCity_Job_Id_10" />
+        <!--ASR Auto & Test-->
+				<Job id="WorkB_WorkBModuleAsr" />
+        <!--SigningPlatform trunk auto-->
+				<Job id="Modules_SigningPlatformTrunkAuto" />
+        <!--Payroll Gateway Auto-->
+        <Job id="PayrollGateway_PayrollGatewayAuto" />
 			</Jobs>
 		</Group>
 	</Groups>

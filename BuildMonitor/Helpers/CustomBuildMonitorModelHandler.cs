@@ -1,153 +1,162 @@
-﻿using System;
-using System.IO;
-using System.Xml.Serialization;
-using BuildMonitor.Models.Home;
+﻿using BuildMonitor.Models.Home;
 using BuildMonitor.Models.Home.Settings;
 using Newtonsoft.Json;
+using System;
+using System.IO;
+using System.Xml.Serialization;
 
 namespace BuildMonitor.Helpers
 {
-	public class CustomBuildMonitorModelHandler : BuildMonitorModelHandlerBase
-	{
-		private Settings settings;
+    public class CustomBuildMonitorModelHandler : BuildMonitorModelHandlerBase
+    {
+        private Settings settings;
 
-		public CustomBuildMonitorModelHandler()
-		{
-			InitializeSettings();
-		}
+        public CustomBuildMonitorModelHandler()
+        {
+            InitializeSettings();
+        }
 
-		private void InitializeSettings()
-		{
-			if (settings != null)
-			{
-				return;
-			}
+        public override BuildMonitorViewModel GetModel()
+        {
+            var model = new BuildMonitorViewModel();
 
-			var path = AppDomain.CurrentDomain.BaseDirectory + "/App_Data/Settings.xml";
-			using (var reader = new StreamReader(path))
-			{
-				var serializer = new XmlSerializer(typeof(Settings));
-				settings = (Settings)serializer.Deserialize(reader);
-			}
-		}
+            GetTeamCityBuildsJson();
 
-		public override BuildMonitorViewModel GetModel()
-		{
-			var model = new BuildMonitorViewModel();
+            foreach (var group in settings.Groups)
+            {
+                var project = new Project();
+                project.Name = group.Name;
 
-			GetTeamCityBuildsJson();
+                AddBuilds(ref project, group);
 
-			foreach (var group in settings.Groups)
-			{
-				var project = new Project();
-				project.Name = group.Name;
+                model.Projects.Add(project);
+            }
 
-				AddBuilds(ref project, group);
+            return model;
+        }
 
-				model.Projects.Add(project);
-			}
+        private void AddBuilds(ref Project project, Group group)
+        {
+            foreach (var job in group.Jobs)
+            {
+                var buildTypeJson = GetJsonBuildTypeById(job.Id);
 
-			return model;
-		}
+                var build = new Build();
+                build.Id = buildTypeJson.id;
+                build.Name = job.Text ?? buildTypeJson.name;
 
-		private void AddBuilds(ref Project project, Group group)
-		{
-			foreach (var job in group.Jobs)
-			{
-				var buildTypeJson = GetJsonBuildTypeById(job.Id);
+                var url = string.Format(buildStatusUrl, build.Id);
+                var buildStatusJsonString = RequestHelper.GetJson(url);
+                buildStatusJson = JsonConvert.DeserializeObject<dynamic>(buildStatusJsonString ?? string.Empty);
 
-				var build = new Build();
-				build.Id = buildTypeJson.id;
-				build.Name = job.Text ?? buildTypeJson.name;
+                build.Branch = buildStatusJson.branchName ?? "default";
+                build.Status = GetBuildStatusForRunningBuild(build.Id);
 
-				var url = string.Format(buildStatusUrl, build.Id);
-				var buildStatusJsonString = RequestHelper.GetJson(url);
-				buildStatusJson = JsonConvert.DeserializeObject<dynamic>(buildStatusJsonString ?? string.Empty);
+                if (build.Status == BuildStatus.Running)
+                {
+                    UpdateBuildStatusFromRunningBuildJson(build.Id);
+                }
+                if (build.Status == BuildStatus.Failure)
+                {
+                    build.FailedTests = buildStatusJson.testOccurrences.failed ?? 0;
+                }
 
-				build.Branch = buildStatusJson.branchName ?? "default";
-				build.Status = GetBuildStatusForRunningBuild(build.Id);
+                build.UpdatedBy = GetUpdatedBy();
+                build.LastRunText = GetLastRunText();
+                build.IsQueued = IsBuildQueued(build.Id);
 
-				if (build.Status == BuildStatus.Running)
-				{
-					UpdateBuildStatusFromRunningBuildJson(build.Id);
-				}
+                if (build.Status == BuildStatus.Running)
+                {
+                    var result = GetRunningBuildBranchAndProgress(build.Id);
+                    build.Branch = result[0];
+                    build.Progress = result[1];
+                }
+                else
+                {
+                    build.Progress = string.Empty;
+                }
 
-				build.UpdatedBy = GetUpdatedBy();
-				build.LastRunText = GetLastRunText();
-				build.IsQueued = IsBuildQueued(build.Id);
+                project.Builds.Add(build);
+            }
+        }
 
-				if (build.Status == BuildStatus.Running)
-				{
-					var result = GetRunningBuildBranchAndProgress(build.Id);
-					build.Branch = result[0];
-					build.Progress = result[1];
-				}
-				else
-				{
-					build.Progress = string.Empty;
-				}
+        private dynamic GetJsonBuildTypeById(string id)
+        {
+            var count = (int)buildTypesJson.count;
+            for (int i = 0; i < count; i++)
+            {
+                if (buildTypesJson.buildType[i].id == id)
+                {
+                    return buildTypesJson.buildType[i];
+                }
+            }
 
-				project.Builds.Add(build);
-			}
-		}
+            return null;
+        }
 
-		private dynamic GetJsonBuildTypeById(string id)
-		{
-			var count = (int)buildTypesJson.count;
-			for (int i = 0; i < count; i++)
-			{
-				if (buildTypesJson.buildType[i].id == id)
-				{
-					return buildTypesJson.buildType[i];
-				}
-			}
+        private string GetUpdatedBy()
+        {
+            try
+            {
+                if ((string)buildStatusJson.triggered.type == "user")
+                {
+                    return (string)buildStatusJson.triggered.user.name;
+                }
+                if ((string)buildStatusJson.triggered.type == "vcs")
+                {
+                    var numChanges = (int)buildStatusJson.lastChanges.count;
+                    return (string)buildStatusJson.lastChanges.change[numChanges - 1].username;
+                }
+                else if ((string)buildStatusJson.triggered.type == "unknown")
+                {
+                    return "TeamCity";
+                }
+                else
+                {
+                    return "Unknown";
+                }
+            }
+            catch
+            {
+                return "Unknown";
+            }
+        }
 
-			return null;
-		}
+        private void InitializeSettings()
+        {
+            if (settings != null)
+            {
+                return;
+            }
 
-		private bool IsBuildQueued(string buildId)
-		{
-			try
-			{
-				var count = (int)buildQueueJson.count;
-				for (int i = 0; i < count; i++)
-				{
-					var build = buildQueueJson.build[i];
+            var path = AppDomain.CurrentDomain.BaseDirectory + "/App_Data/Settings.xml";
+            using (var reader = new StreamReader(path))
+            {
+                var serializer = new XmlSerializer(typeof(Settings));
+                settings = (Settings)serializer.Deserialize(reader);
+            }
+        }
 
-					if (buildId == (string)build.buildTypeId && (string)build.state == "queued")
-					{
-						return true;
-					}
-				}
-			}
-			catch
-			{
-			}
+        private bool IsBuildQueued(string buildId)
+        {
+            try
+            {
+                var count = (int)buildQueueJson.count;
+                for (int i = 0; i < count; i++)
+                {
+                    var build = buildQueueJson.build[i];
 
-			return false;
-		}
+                    if (buildId == (string)build.buildTypeId && (string)build.state == "queued")
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+            }
 
-		private string GetUpdatedBy()
-		{
-			try
-			{
-				if ((string)buildStatusJson.triggered.type == "user")
-				{
-					return (string)buildStatusJson.triggered.user.name;
-				}
-				else if ((string)buildStatusJson.triggered.type == "unknown")
-				{
-					return "TeamCity";
-				}
-				else
-				{
-					return "Unknown";
-				}
-			}
-			catch
-			{
-				return "Unknown";
-			}
-		}
-	}
+            return false;
+        }
+    }
 }
