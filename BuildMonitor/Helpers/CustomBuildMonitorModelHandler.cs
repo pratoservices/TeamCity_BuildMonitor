@@ -58,7 +58,8 @@ namespace BuildMonitor.Helpers
                 }
                 if (build.Status == BuildStatus.Failure)
                 {
-                    build.FailedTests = buildStatusJson.testOccurrences.failed ?? 0;
+                    if (buildStatusJson.testOccurrences != null)
+                        build.FailedTests = buildStatusJson.testOccurrences.failed ?? 0;
                 }
 
                 build.UpdatedBy = GetUpdatedBy();
